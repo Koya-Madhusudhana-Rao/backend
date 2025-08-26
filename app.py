@@ -30,14 +30,19 @@ app.config.update(
 # ✅ Allow CORS from your frontend (Vercel + local dev)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+from flask_cors import CORS
+import re
+
 CORS(
     app,
     supports_credentials=True,
     resources={r"/api/*": {"origins": [
-        os.getenv("FRONTEND_URL", "http://localhost:5173"),
-        re.compile(r"^https://.*\.vercel\.app$"),  # preview builds
+        "http://localhost:5173",
+        "https://frontend1-pi-orcin.vercel.app",
+        re.compile(r"^https://.*\.vercel\.app$")   # allow preview builds
     ]}}
 )
+
 
 # ✅ MongoDB Connection using env vars
 def get_db_connection():
