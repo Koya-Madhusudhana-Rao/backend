@@ -9,30 +9,55 @@ import os
 from bson import ObjectId
 from functools import wraps
 import uuid
+import re
+import json
+
+# Load .env locally (Render will use dashboard env vars)
 load_dotenv()  
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Change this to a fixed secret in production
 
-# Enable CORS for all routes
-CORS(app, supports_credentials=True, origins=['http://localhost:5173', 'https://your-frontend-domain.vercel.app'])
+# ✅ Use fixed secret key from env var (important for sessions)
+app.secret_key = os.getenv("SECRET_KEY", "dev-change-me")
 
-# MongoDB Connection
+# ✅ Session cookie config (cross-site between Vercel & Render)
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,   # Render uses HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+)
+
+# ✅ Allow CORS from your frontend (Vercel + local dev)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+CORS(
+    app,
+    supports_credentials=True,
+    resources={
+        r"/api/*": {
+            "origins": [
+                FRONTEND_URL,                              # your live frontend
+                re.compile(r"^https://.*\.vercel\.app$"),  # preview deploys
+                "http://localhost:5173",                   # local dev
+            ]
+        }
+    },
+)
+
+# ✅ MongoDB Connection using env vars
 def get_db_connection():
-    # Replace these with your actual MongoDB credentials
     USERNAME = os.getenv("MONGO_USER")
     PASSWORD = os.getenv("MONGO_PASS")
+    HOST = os.getenv("MONGO_HOST", "cluster0.acwgncy.mongodb.net")
+    DB_NAME = os.getenv("MONGO_DB", "TimesheetDB")
+    APP_NAME = os.getenv("MONGO_APP", "Cluster0")
 
-    HOST = "cluster0.acwgncy.mongodb.net"
-    DB_NAME = "TimesheetDB"
-    APP_NAME = "Cluster0"
-    
-    # Build URI with proper encoding for @ symbol
+    # Build URI with proper encoding
     uri = (
         f"mongodb+srv://{quote_plus(USERNAME)}:{quote_plus(PASSWORD)}@{HOST}"
         f"/?retryWrites=true&w=majority&appName={APP_NAME}"
     )
-    
+
     client = MongoClient(uri, serverSelectionTimeoutMS=10000)
     return client[DB_NAME]
 
@@ -48,6 +73,17 @@ audits = db['audit_logs']
 users.create_index('username', unique=True)
 tasks.create_index('assigned_to')
 timesheets.create_index([('username', 1), ('check_in', -1)])
+
+# Custom JSON encoder for ObjectId + datetime
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
+
+app.json_encoder = JSONEncoder
 
 # Utility functions
 def log_action(username, action, extra=None):
