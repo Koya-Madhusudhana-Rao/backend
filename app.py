@@ -33,15 +33,10 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 CORS(
     app,
     supports_credentials=True,
-    resources={
-        r"/api/*": {
-            "origins": [
-                FRONTEND_URL,                              # your live frontend
-                re.compile(r"^https://.*\.vercel\.app$"),  # preview deploys
-                "http://localhost:5173",                   # local dev
-            ]
-        }
-    },
+    resources={r"/api/*": {"origins": [
+        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        re.compile(r"^https://.*\.vercel\.app$"),  # preview builds
+    ]}}
 )
 
 # ✅ MongoDB Connection using env vars
